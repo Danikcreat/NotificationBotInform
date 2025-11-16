@@ -1,0 +1,1 @@
+# Scalingo requirement placeholder: dependencies managed via package.json
