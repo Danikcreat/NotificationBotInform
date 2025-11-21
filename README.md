@@ -50,6 +50,24 @@ npm run notify -- --message "Встречаемся в 18:00"
 npm run notify -- --message "Созвон" --login anna_pet --login ivan_official
 ```
 
+### HTTP-доступ к рассылке
+Сервер `npm run notify-server` поднимает HTTP-точку (по умолчанию `http://localhost:8081/broadcast`), к которой может обращаться ваш сайт. Тело запроса:
+```jsonc
+{
+  "message": "Напоминание в 18:00",
+  "logins": ["anna_pet", "ivan_official"] // опционально
+}
+```
+Если задан `BROADCAST_ACCESS_TOKEN`, передавайте его в `Authorization: Bearer <token>` или `X-API-Key`. В ответ придёт JSON со статистикой доставки.
+
+Пример cURL:
+```bash
+curl -X POST http://localhost:8081/broadcast ^
+  -H "Content-Type: application/json" ^
+  -H "Authorization: Bearer secret-token" ^
+  -d "{\"message\":\"Напоминание в 18:00\"}"
+```
+
 ## Переменные окружения
 | Имя | Назначение |
 | --- | --- |
@@ -63,6 +81,8 @@ npm run notify -- --message "Созвон" --login anna_pet --login ivan_officia
 | `TASK_NOTIFIER_STATE_PATH` | Файл для хранения отметок об отправленных уведомлениях |
 | `TASK_URL_TEMPLATE` | Необязательный шаблон ссылки на задачу (`:id` заменяется на идентификатор) |
 | `BROADCAST_BATCH_SIZE` | После скольких сообщений вставлять небольшую паузу при рассылке |
+| `BROADCAST_SERVER_PORT` | Порт HTTP-сервера рассылки (по умолчанию `8081`) |
+| `BROADCAST_ACCESS_TOKEN` | Токен для авторизации HTTP-запросов (опционально) |
 
 ## Структура
 - `src/index.js` — точка входа, регистрация хендлеров и запуск планировщика

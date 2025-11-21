@@ -5,7 +5,8 @@
   "scripts": {
     "dev": "node src/index.js",
     "start": "node src/index.js",
-    "notify": "node src/cli/notify.js"
+    "notify": "node src/cli/notify.js",
+    "notify-server": "node src/broadcastServer.js"
   },
   "dependencies": {
     "axios": "^1.7.7",

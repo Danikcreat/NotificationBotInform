@@ -39,6 +39,8 @@ const config = Object.freeze({
   ),
   broadcastBatchSize: readNumberEnv("BROADCAST_BATCH_SIZE", 20),
   taskUrlTemplate: readEnv("TASK_URL_TEMPLATE"),
+  broadcastServerPort: readNumberEnv("BROADCAST_SERVER_PORT", 8081),
+  broadcastAccessToken: readEnv("BROADCAST_ACCESS_TOKEN"),
 });
 
 export default config;

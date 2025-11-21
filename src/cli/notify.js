@@ -1,8 +1,5 @@
-import { Telegraf } from "telegraf";
-import config from "../config.js";
 import logger from "../logger.js";
-import ApiClient from "../apiClient.js";
-import { UserDirectory } from "../userDirectory.js";
+import { sendBroadcast } from "../broadcast.js";
 
 function parseArgs(argv) {
   const args = { message: null, logins: [], help: false };
@@ -49,46 +46,10 @@ async function main() {
     process.exit(1);
   }
 
-  const apiClient = new ApiClient({
-    baseUrl: config.apiBaseUrl,
-    apiToken: config.apiToken,
-    serviceLogin: config.serviceLogin,
-    servicePassword: config.servicePassword,
-    logger,
-  });
-  const userDirectory = new UserDirectory({
-    apiClient,
-    logger,
-    refreshIntervalMs: config.userRefreshIntervalMs,
-  });
-  await userDirectory.refresh(true);
-
-  const optedInUsers = userDirectory.getOptedInUsers();
-  const loginFilter = args.logins.map((login) => login.trim().toLowerCase());
-  const recipients = loginFilter.length
-    ? optedInUsers.filter((user) => loginFilter.includes(String(user.login || "").toLowerCase()))
-    : optedInUsers;
-
-  if (!recipients.length) {
-    logger.warn("No recipients matched the provided filters.");
-    return;
+  const result = await sendBroadcast({ message: args.message, logins: args.logins });
+  if (!result.total) {
+    logger.warn("Broadcast completed with zero recipients.");
   }
-
-  const bot = new Telegraf(config.telegramBotToken);
-  let sent = 0;
-  for (const user of recipients) {
-    try {
-      await bot.telegram.sendMessage(user.telegramChatId, args.message);
-      logger.info({ login: user.login }, "Broadcast delivered");
-      sent += 1;
-      if (config.broadcastBatchSize > 0 && sent % config.broadcastBatchSize === 0) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-      }
-    } catch (error) {
-      logger.error({ err: error, login: user.login }, "Failed to send broadcast");
-    }
-  }
-  logger.info({ sent, total: recipients.length }, "Broadcast finished");
 }
 
 main().catch((error) => {
