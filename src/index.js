@@ -7,6 +7,7 @@ import StateStore from "./stateStore.js";
 import TaskNotifier from "./notifier.js";
 import { buildTaskSummary, tasksForLogin } from "./tasks.js";
 import { broadcastCredentials } from "./credentialBroadcaster.js";
+import { sendBroadcast } from "./broadcast.js";
 
 async function main() {
   const apiClient = new ApiClient({
@@ -121,6 +122,27 @@ function registerHandlers(bot, userDirectory, apiClient) {
     } catch (error) {
       logger.error({ err: error }, "Credential broadcast via command failed");
       await ctx.reply("Не удалось выполнить рассылку. Проверь логи бота.");
+    }
+  });
+
+  bot.command(["sendbroadcast", "sendBroadcast"], async (ctx) => {
+    const fullText = ctx.message?.text || "";
+    const payload = fullText.split(" ").slice(1).join(" ").trim();
+    if (!payload) {
+      await ctx.reply("После команды нужно указать текст рассылки.");
+      return;
+    }
+    logger.info(
+      { requestedBy: ctx.from?.username, chatId: ctx.chat?.id },
+      "Hidden manual broadcast command triggered"
+    );
+    await ctx.reply("Начинаю скрытую рассылку...");
+    try {
+      const result = await sendBroadcast({ message: payload });
+      await ctx.reply(`Готово. Отправлено ${result.sent} из ${result.total}. Пропущено ${result.total - result.sent}.`);
+    } catch (error) {
+      logger.error({ err: error }, "Manual broadcast failed");
+      await ctx.reply("Не удалось выполнить рассылку. Проверь логи.");
     }
   });
 
