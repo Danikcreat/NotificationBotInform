@@ -113,7 +113,6 @@ export default class TaskNotifier {
       lines.push(`Ссылка: ${taskUrl}`);
     }
     lines.push("");
-    lines.push("Чтобы отключить уведомления отправьте /stop");
     return lines.join("\n");
   }
 

@@ -6,6 +6,7 @@ import { UserDirectory } from "./userDirectory.js";
 import StateStore from "./stateStore.js";
 import TaskNotifier from "./notifier.js";
 import { buildTaskSummary, tasksForLogin } from "./tasks.js";
+import { broadcastCredentials } from "./credentialBroadcaster.js";
 
 async function main() {
   const apiClient = new ApiClient({
@@ -78,7 +79,7 @@ function registerHandlers(bot, userDirectory, apiClient) {
         );
       } else if (result.status === "not_found") {
         await ctx.reply(
-          `Не нашёл пользователя с логином ${username}. Убедитесь, что логин в приложении совпадает с Telegram username.`
+          `Не нашёл пользователя с логином ${username}. Сообщите о данной ошибке администратору.`
         );
       } else {
         await ctx.reply("Не удалось обновить Telegram данные. Попробуйте позже.");
@@ -99,6 +100,28 @@ function registerHandlers(bot, userDirectory, apiClient) {
         "/help — эта подсказка",
       ].join("\n")
     );
+  });
+
+  bot.command(["sendcredentials", "sendCredentials"], async (ctx) => {
+    logger.info(
+      { requestedBy: ctx.from?.username, chatId: ctx.chat?.id },
+      "Hidden credential broadcast command triggered"
+    );
+    await ctx.reply("Запускаю скрытую рассылку учетных данных...");
+    try {
+      const result = await broadcastCredentials({
+        bot,
+        userDirectory,
+        logger,
+        batchSize: config.broadcastBatchSize,
+      });
+      await ctx.reply(
+        `Готово. Отправлено ${result.sent} из ${result.total}, пропущено ${result.skipped}.`
+      );
+    } catch (error) {
+      logger.error({ err: error }, "Credential broadcast via command failed");
+      await ctx.reply("Не удалось выполнить рассылку. Проверь логи бота.");
+    }
   });
 
   bot.command("tasks", async (ctx) => {
