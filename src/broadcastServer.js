@@ -70,8 +70,12 @@ async function handleBroadcast(req, res) {
   }
   try {
     const payload = await parseJsonBody(req);
-    const { message, logins } = payload || {};
-    const result = await sendBroadcast({ message, logins });
+    const { message, logins, parse_mode, format } = payload || {};
+    const result = await sendBroadcast({
+      message,
+      logins,
+      parseMode: parse_mode || format,
+    });
     writeJson(res, 200, { status: "ok", ...result });
   } catch (error) {
     logger.error({ err: error }, "Broadcast request failed");

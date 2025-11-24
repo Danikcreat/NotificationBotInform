@@ -2,7 +2,7 @@ import logger from "../logger.js";
 import { sendBroadcast } from "../broadcast.js";
 
 function parseArgs(argv) {
-  const args = { message: null, logins: [], help: false };
+  const args = { message: null, logins: [], help: false, parseMode: null };
   for (let i = 0; i < argv.length; i += 1) {
     const arg = argv[i];
     if (arg === "--message" || arg === "-m") {
@@ -24,6 +24,12 @@ function parseArgs(argv) {
         args.logins.push(login);
         i += 1;
       }
+    } else if (arg === "--format" || arg === "--parse-mode") {
+      const value = argv[i + 1];
+      if (value) {
+        args.parseMode = value;
+        i += 1;
+      }
     } else if (arg === "--help" || arg === "-h") {
       args.help = true;
     }
@@ -32,7 +38,9 @@ function parseArgs(argv) {
 }
 
 function printUsage() {
-  console.log("Usage: npm run notify -- --message \"text\" [--login user1 --login user2]");
+  console.log(
+    "Usage: npm run notify -- --message \"text\" [--login user1 --login user2] [--format html|markdown|markdownV2]"
+  );
 }
 
 async function main() {
@@ -46,7 +54,7 @@ async function main() {
     process.exit(1);
   }
 
-  const result = await sendBroadcast({ message: args.message, logins: args.logins });
+  const result = await sendBroadcast({ message: args.message, logins: args.logins, parseMode: args.parseMode });
   if (!result.total) {
     logger.warn("Broadcast completed with zero recipients.");
   }

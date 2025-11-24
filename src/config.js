@@ -41,6 +41,7 @@ const config = Object.freeze({
   taskUrlTemplate: readEnv("TASK_URL_TEMPLATE"),
   broadcastServerPort: readNumberEnv("BROADCAST_SERVER_PORT", 8081),
   broadcastAccessToken: readEnv("BROADCAST_ACCESS_TOKEN"),
+  broadcastParseMode: readEnv("BROADCAST_PARSE_MODE"),
 });
 
 export default config;

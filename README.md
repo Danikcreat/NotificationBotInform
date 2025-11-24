@@ -47,8 +47,12 @@ npm run notify -- --message "Встречаемся в 18:00"
 ```
 Можно ограничить список конкретными логинами:
 ```bash
-npm run notify -- --message "Созвон" --login anna_pet --login ivan_official
-```
+ npm run notify -- --message "Созвон" --login anna_pet --login ivan_official
+ ```
+ Чтобы спрятать ссылки под текст, используйте Telegram-форматирование:
+ ```bash
+ npm run notify -- --message "<a href=\"https://example.com\">Ссылка</a>" --format html
+ ```
 
 ### Рассылка логинов и паролей
 Однократно напомнить пользователям их логин и пароль можно командой:
@@ -63,19 +67,20 @@ npm run broadcast-credentials
 ```
 Если у пользователя нет логина, пароля или Telegram-чата, он пропускается. Перед запуском убедитесь, что сервисный аккаунт имеет права видеть поле `password`.
 
-### HTTP-доступ к рассылке
+### HTTP-доступ к рассылке 
 Сервер `npm run notify-server` поднимает HTTP-точку (по умолчанию `http://localhost:8081/broadcast`), к которой может обращаться ваш сайт. Тело запроса:
 ```jsonc
 {
   "message": "Напоминание в 18:00",
-  "logins": ["anna_pet", "ivan_official"] // опционально
+  "logins": ["anna_pet", "ivan_official"], // опционально
+  "format": "html" // или parse_mode: "MarkdownV2"
 }
 ```
-Если задан `BROADCAST_ACCESS_TOKEN`, передавайте его в `Authorization: Bearer <token>` или `X-API-Key`. В ответ придёт JSON со статистикой доставки.
+Если задан `BROADCAST_ACCESS_TOKEN`, передавайте его в `Authorization: Bearer <token>` или `X-API-Key`. Поля `format`/`parse_mode` включают HTML/Markdown в Telegram; если их не задавать, можно выставить значение по умолчанию переменной `BROADCAST_PARSE_MODE`. В ответ придёт JSON со статистикой доставки.
 
 Пример cURL:
 ```bash
-curl -X POST http://localhost:8081/broadcast ^
+curl -X POST http://vm635329.eurodir.ru:8081/broadcast ^
   -H "Content-Type: application/json" ^
   -H "Authorization: Bearer secret-token" ^
   -d "{\"message\":\"Напоминание в 18:00\"}"
@@ -96,6 +101,7 @@ curl -X POST http://localhost:8081/broadcast ^
 | `BROADCAST_BATCH_SIZE` | После скольких сообщений вставлять небольшую паузу при рассылке |
 | `BROADCAST_SERVER_PORT` | Порт HTTP-сервера рассылки (по умолчанию `8081`) |
 | `BROADCAST_ACCESS_TOKEN` | Токен для авторизации HTTP-запросов (опционально) |
+| `BROADCAST_PARSE_MODE` | Формат сообщений по умолчанию (`HTML`, `Markdown`, `MarkdownV2`) |
 
 ## Структура
 - `src/index.js` — точка входа, регистрация хендлеров и запуск планировщика
