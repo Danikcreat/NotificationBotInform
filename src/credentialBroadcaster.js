@@ -19,6 +19,7 @@ function buildCredentialMessage(login, password) {
     `<b>Логин:</b> ${escapedLogin}`,
     `<b>Пароль:</b> <tg-spoiler>${escapedPassword}</tg-spoiler>`,
     "",
+    "Наша платформа: task-manager-inform.vercel.app",
     "Удачной работы! По вопросам пиши администратору 🤖",
   ].join("\n");
 }
@@ -29,6 +30,7 @@ export async function broadcastCredentials({
   logger,
   batchSize = 20,
   forceRefresh = true,
+  logins = [],
 }) {
   if (!(userDirectory instanceof UserDirectory)) {
     throw new Error("broadcastCredentials requires an instance of UserDirectory");
@@ -36,9 +38,21 @@ export async function broadcastCredentials({
   if (forceRefresh) {
     await userDirectory.refresh(true);
   }
-  const recipients = userDirectory.getOptedInUsers();
+  const filterLogins = Array.isArray(logins)
+    ? logins
+        .map((login) => (typeof login === "string" ? login.trim().toLowerCase() : ""))
+        .filter(Boolean)
+    : [];
+  const optedInUsers = userDirectory.getOptedInUsers();
+  const recipients = filterLogins.length
+    ? optedInUsers.filter((user) => filterLogins.includes(String(user.login || "").trim().toLowerCase()))
+    : optedInUsers;
   if (!recipients.length) {
-    logger?.warn("No Telegram users opted in — skipping credentials broadcast");
+    logger?.warn(
+      filterLogins.length
+        ? "No Telegram users matched the provided login filter"
+        : "No Telegram users opted in - skipping credentials broadcast"
+    );
     return { sent: 0, skipped: 0, total: 0 };
   }
 
