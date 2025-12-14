@@ -1,155 +1,176 @@
 # API Overview
 
-Документация описывает текущее REST API веб‑приложения. Все ответы возвращают JSON. Для защищённых эндпоинтов требуется заголовок `Authorization: Bearer <token>`.
+Обновлённый backend Media Task Manager построен на **Express 4 + PostgreSQL (Supabase)**.  
+Все эндпоинты отдают и принимают JSON, ответы в случае ошибки содержат поле `message`.  
+Для защищённых маршрутов требуется заголовок `Authorization: Bearer <JWT>` с токеном, полученным при входе.
 
-## Auth
+## Основные переменные окружения
+
+| Имя | Назначение |
+| --- | --- |
+| `DATABASE_URL` | строка подключения к PostgreSQL (обязательна). |
+| `JWT_SECRET` | секрет для подписи токенов (обязателен). |
+| `PORT` | порт Express (по умолчанию `4000`). |
+| `DEFAULT_SUPER_ADMIN_*` | набор значений для авто-создания супер-админа при старте (`LOGIN`, `PASSWORD`, `FIRST_NAME`, `LAST_NAME`, и т.д.). |
+| `BROADCAST_API_URL` | адрес сервиса рассылок/бота, куда отправляются напоминания исполнителям. |
+| `BROADCAST_ACCESS_TOKEN` | токен для авторизации при вызове `BROADCAST_API_URL`. |
+| `PUBLIC_APP_URL` | базовый URL фронтенда. Используется для формирования ссылок в уведомлениях. |
+| `CONTENT_PLAN_RANGE_LIMIT_DAYS` | максимальный диапазон `GET /api/content-plan` (по умолчанию 93 дня). |
+| `DB_POOL_*` / `PG_*` | параметры пула соединений (`max`, `idleTimeout`, `connectionTimeout`). |
+
+## Аутентификация
+
 ### `POST /api/auth/login`
-Вход пользователя. Тело запроса: `{ login, password }`. Ответ: `{ token, user }`.
+Вход по логину и паролю.
+
+**Тело**: `{ login, password }`  
+**Ответ** `200 OK`: `{ token, user }`, где `user` — запись без пароля.  
+**Ошибки**: `400` (пропущены поля), `401` (неверная пара).
 
 ### `GET /api/auth/me`
-Возвращает профиль текущего пользователя по JWT. Ответ: `{ user }`.
+Возвращает данные текущего пользователя на основе JWT.
 
-## Users
-### `GET /api/users`
-Возвращает `{ users: User[] }`. Пользователи с ролью `super_admin`/`admin` видят поле `password`.
+**Ответ** `200 OK`: `{ user }`.  
+**Ошибки**: `401` (нет/битый токен), `404` (пользователь удалён).
 
-### `POST /api/users`
-Создание пользователя (`super_admin` или `admin`). Тело запроса включает ФИО, логин, роль, пароль и т.д.
+## Пользователи
 
-### `PUT /api/users/:id`
-Обновление пользователя. Поля можно передавать частично.
+Все маршруты требуют авторизации. Управление пользователями ограничено `super_admin` и `admin`, причём каждый админ может редактировать только роли из `getAssignableRoles(actorRole)`. Пароль виден только супер-админам.
 
-### `DELETE /api/users/:id`
-Удаляет запись.
+- `GET /api/users` — список пользователей, отсортированный по ФИО. При наличии прав включает поле `password`.
+- `POST /api/users` — создание. Обязательные поля: `lastName`, `firstName`, `login`, `password`, `role`. Можно сразу передать `telegramUsername`, `telegramChatId`, `telegramOptIn`. Возвращает созданного пользователя.
+- `PUT /api/users/:id` — частичное обновление (ФИО, логин, роль, должность, группа, Telegram-поля).
+- `DELETE /api/users/:id` — удаление.
+- `POST /api/users/:id/reset-password` — генерирует новый пароль (8 символов), сохраняет его и возвращает `{ user, password }`.
+- `PUT /api/users/:id/telegram` — обновление Telegram-данных. Пользователь может вызывать для себя, либо оператор с правами может изменить любые поля (`telegramUsername`, `telegramChatId`, `telegramOptIn`).
 
-### `POST /api/users/:id/reset-password`
-Сбрасывает пароль и возвращает новый пароль в ответе (если роль позволяет видеть).
+## Задачи (`/api/tasks`)
 
-## Tasks
-### `GET /api/tasks`
-Список всех задач. Каждая задача — JSON payload с вложениями и подзадачами.
+Хранение идёт в таблице `tasks`: `id text PRIMARY KEY`, `payload jsonb`, `created_at timestamptz`, `updated_at timestamptz`. Сервер не требует авторизации для чтения, поскольку UI использует client-side фильтры; при необходимости можно защитить маршруты middleware’ом.
 
-### `GET /api/tasks/:id`
-Возвращает одну задачу по id.
+### Структура задачи
 
-### `POST /api/tasks`
-Создаёт задачу. Тело включает поля: `title`, `responsible`, `deadline`, `priority`, `status`, `description?`, `attachments?`, `subtasks?`.
+```jsonc
+{
+  "id": "uuid",
+  "title": "string",
+  "description": "string",
+  "deadline": "2025-12-31T12:00:00.000Z",
+  "priority": "low|normal|high|urgent",
+  "status": "todo|in_progress|done|archived",
+  "responsible": "ФИО исполнителя",
+  "assignees": [
+    { "name": "string", "login": "user_login", "telegramUsername": "...", "telegramChatId": "..." }
+  ],
+  "assigneeLogins": ["user_login"],
+  "assigner": { "name": "...", "login": "...", "telegramUsername": "...", "telegramChatId": "..." },
+  "attachments": [{ "id": "str", "label": "Название", "url": "https://..." }],
+  "subtasks": [{ "id": "str", "text": "Что сделать", "done": false }],
+  "linkedContent": [ { "bucket": "instagram", "contentId": 42 } ],
+  "createdAt": "ISO string",
+  "updatedAt": "ISO string"
+}
+```
 
-### `PUT /api/tasks/:id`
-Обновляет задачу.
+### Эндпоинты
 
-### `DELETE /api/tasks/:id`
-Удаляет задачу (все связи в `content_task_links` удаляются каскадно).
+- `GET /api/tasks` — список всех задач (сортировка по `updated_at DESC`). После выборки автоматически подмешиваются связи с публикациями (`linkedContent`).
+- `GET /api/tasks/:id` — одна задача.
+- `POST /api/tasks` — создание. Обязательные поля: `title`, `deadline`, `priority`, `status`, хотя бы один исполнитель (`assignees[]` или `responsible`). Сервер:
+  1. нормализует вложенные коллекции;
+  2. генерирует `id` при отсутствии;
+  3. вычисляет `assigneeLogins`;
+  4. отправляет уведомление исполнителям через `BROADCAST_API_URL` (если настроено).
+  Возвращает созданную задачу.
+- `PUT /api/tasks/:id` — частичное обновление с полной валидацией. Поля `attachments`, `subtasks`, `assignees` заменяются целиком.
+- `DELETE /api/tasks/:id` — удаление.
 
-## Features
-Для модуля «дорожная карта» предусмотрены CRUD эндпоинты:
-- `GET /api/features`
-- `POST /api/features`
-- `PUT /api/features/:id`
-- `DELETE /api/features/:id`
+## Фичи (`/api/features`)
 
-## Content Plan
-### `GET /api/content-plan`
-Query: `month`, `year`. Ответ: `{ range, events, instagram, telegram }`.
+Используются для product roadmap. Хранятся аналогично задачам (таблица `features` + колонка `payload jsonb`).
 
-### `POST /api/content-plan/:bucket`
-Создание записи. `bucket`: `events | instagram | telegram`. Набор полей определяется таблицей (см. схему ниже). Доступ ограничен в соответствии с `CONTENT_PLAN_PERMISSIONS`.
+- `GET /api/features` и `GET /api/features/:id` — чтение.
+- `POST /api/features` — создание. Обязательные поля: `title`, `status`. Дополнительные: `description`, `eta`, `category`, `tags[]`, `baseVotes`.
+- `PUT /api/features/:id` — частичное обновление.
+- `DELETE /api/features/:id` — удаление.
 
-### `PUT /api/content-plan/:bucket/:id`
-Обновление записи.
+## Контент-план
 
-### `DELETE /api/content-plan/:bucket/:id`
-Удаление записи.
+### Бакеты и таблицы
 
-### Материалы публикаций
-- `GET /api/content-plan/:bucket/:id/assets`
-- `POST /api/content-plan/:bucket/:id/assets` — `{ title, url?, notes? }`
-- `DELETE /api/content-plan/:bucket/:id/assets/:assetId`
+| Bucket | Таблица | Поля | Кто управляет |
+| --- | --- | --- | --- |
+| `events` | `events` | `title`, `description?`, `date`, `time?`, `location?`, `type` | `super_admin`, `admin` |
+| `instagram` | `content_instagram` | `title`, `description?`, `date`, `time`, `type`, `status`, `event_id?` | `super_admin`, `admin`, `content_manager` |
+| `telegram` | `content_telegram` | как у instagram | `super_admin`, `admin`, `content_manager` |
+| `youtube` | `content_youtube` | как у instagram, `type` ∈ {`video`,`shorts`} | `super_admin`, `admin`, `content_manager` |
 
-### Связанные задачи
-- `GET /api/content-plan/:bucket/:id/tasks`
-- `POST /api/content-plan/:bucket/:id/tasks` — `{ taskId }`
-- `DELETE /api/content-plan/:bucket/:id/tasks/:taskId`
+### Диапазон
 
-## Авторизация и роли
-- JWT хранится в localStorage (`inform_token_v1`).
-- Роли: `super_admin`, `admin`, `content_manager`, `executor`. Доступ к отдельным эндпоинтам описан в `CONTENT_PLAN_PERMISSIONS` (см. `api/server.js`).
+`GET /api/content-plan?month=12&year=2025` возвращает объект:
 
-## Database Schema
+```jsonc
+{
+  "range": { "from": "2025-12-01", "to": "2025-12-31" },
+  "events": [...],
+  "instagram": [...],
+  "telegram": [...],
+  "youtube": [...]
+}
+```
 
-### users
-| column | type | notes |
+Если передать `from`/`to`, диапазон ограничивается `CONTENT_PLAN_RANGE_LIMIT_DAYS`. Для каждого bucket данные содержат `id`, `title`, `date`, `time`, `status`, связь с событием и технические поля `createdAt/updatedAt`.
+
+### CRUD
+
+- `POST /api/content-plan/:bucket` — создание записи в бакете. Требует авторизации и прав на bucket.
+- `PUT /api/content-plan/:bucket/:id` — частичное обновление. `id` должен быть положительным целым.
+- `DELETE /api/content-plan/:bucket/:id` — удаление.
+
+### Assets и задачи
+
+| Маршрут | Описание |
+| --- | --- |
+| `GET /api/content-plan/:bucket/:id/assets` | список вложений публикации (`bucket != events`). |
+| `POST /api/content-plan/:bucket/:id/assets` | создание вложения `{ title, url?, notes? }`. |
+| `DELETE /api/content-plan/:bucket/:id/assets/:assetId` | удаление вложения. |
+| `GET /api/content-plan/:bucket/:id/tasks` | задачи, привязанные к публикации. |
+| `POST /api/content-plan/:bucket/:id/tasks` | привязка задачи (`{ taskId }`), возвращает объект связи. |
+| `DELETE /api/content-plan/:bucket/:id/tasks/:taskId` | отвязка задачи. |
+
+Каждый запрос, работающий с конкретной записью, предварительно проверяет существование bucket и ID (`resolveContentItemRequest`). Эндпоинты изменения требуют авторизации и совпадения роли с `CONTENT_PLAN_PERMISSIONS`.
+
+## Health-check и статические файлы
+
+- `GET /api/health` — `{ status: "ok", timestamp }`.
+- После определения API сервер раздаёт статический фронтенд из корня репозитория (`app.use(express.static(..))`) и пробрасывает все неизвестные маршруты на `index.html`.
+
+## Уведомления исполнителей
+
+Функция `notifyAssigneesAboutTask` формирует сообщение вида:
+
+```
+🔔 Привет!
+
+Тебе назначена новая задачка: «Название»
+⏰ Дедлайн: 31 дек 14:00
+
+Не забудь выполнить её в срок! Я тебе напомню 😈
+🔗 <a href="https://.../index.html#task=...">Ссылка</a>
+```
+
+Сообщение отправляется POST-запросом на `BROADCAST_API_URL` с телом `{ message, logins }`, где `logins` — список логинов исполнителей. Если `BROADCAST_API_URL` пуст, уведомления просто не отправляются.
+
+## Схема базы
+
+| Таблица | Основные столбцы | Примечания |
 | --- | --- | --- |
-| id | bigserial PK | |
-| last_name, first_name | text | обязательные |
-| middle_name | text | optional |
-| birth_date | text | формат `YYYY-MM-DD`, constraint `users_birth_date_check` |
-| group_number | text | optional |
-| login | text | unique |
-| password | text | хранится в явном виде (в зависимости от роли) |
-| position | text | optional |
-| role | text | enum |
-| created_at, updated_at | timestamptz | значения по умолчанию NOW() |
+| `users` | `id bigserial PK`, ФИО, `login UNIQUE`, `password`, `role`, `position`, `group_number`, `telegram_username`, `telegram_chat_id`, `telegram_opt_in boolean NOT NULL DEFAULT false`, `created_at`, `updated_at` | см. `docs/roles-and-users.md` для ролей и правил. |
+| `tasks` | `id text PK`, `payload jsonb NOT NULL`, `created_at timestamptz`, `updated_at timestamptz` | содержит полноценно денормализованные задачи. |
+| `features` | `id text PK`, `payload jsonb NOT NULL`, `created_at timestamptz`, `updated_at timestamptz` | product roadmap. |
+| `events` | `id serial PK`, `title`, `description`, `date`, `time`, `location`, `type`, `created_at`, `updated_at` | используется в контент-плане. |
+| `content_instagram` / `content_telegram` / `content_youtube` | поля публикаций + `status`, `event_id`, `created_at`, `updated_at` | `content_youtube.type` ограничен `video/shorts`. |
+| `content_assets` | `id bigserial PK`, `channel text`, `content_id integer`, `title`, `url`, `notes`, timestamps | `channel` соответствует бакету. |
+| `content_task_links` | `id bigserial PK`, `task_id text FK`, `channel text`, `content_id integer`, timestamps, уникальный составной индекс | обеспечивает связь задач с публикациями; `ON DELETE CASCADE` по `task_id`. |
 
-### tasks
-| column | type | notes |
-| --- | --- | --- |
-| id | text PK | UUID/строка |
-| payload | jsonb | все поля задачи (title, responsible, attachments, etc.) |
-| created_at, updated_at | timestamptz | |
-
-### features
-| column | type | notes |
-| --- | --- | --- |
-| id | text PK | |
-| payload | jsonb | данные фич/идей |
-| created_at, updated_at | timestamptz | |
-
-### events
-| column | type | notes |
-| --- | --- | --- |
-| id | serial PK | |
-| title | text | обязательное |
-| description | text | optional |
-| date | text | `YYYY-MM-DD` |
-| time | text | `HH:MM` |
-| location | text | optional |
-| type | text | обязательное |
-| created_at, updated_at | timestamptz | |
-
-### content_instagram / content_telegram
-| column | type | notes |
-| --- | --- | --- |
-| id | serial PK | |
-| title, description | text | описание публикации |
-| date | text | `YYYY-MM-DD` |
-| time | text | `HH:MM`, шаг 30 минут |
-| type | text | формат (пост/сторис/карусель/рилс) |
-| status | text | `draft|ready|scheduled|published` |
-| event_id | integer FK | `events.id`, ON DELETE SET NULL |
-| created_at, updated_at | timestamptz | |
-
-### content_task_links
-| column | type | notes |
-| --- | --- | --- |
-| id | bigserial PK | |
-| task_id | text FK | ON DELETE CASCADE |
-| channel | text | `'instagram'` или `'telegram'` |
-| content_id | integer | id записи в соответствующей таблице |
-| created_at, updated_at | timestamptz | |
-| unique task/channel/content | защищает от дубликатов |
-
-### content_assets
-| column | type | notes |
-| --- | --- | --- |
-| id | bigserial PK | |
-| channel | text | `'instagram'` или `'telegram'` |
-| content_id | integer | связан с публикацией |
-| title | text | обязательное название |
-| url | text | ссылка на файл/видео и т.д. |
-| notes | text | комментарий |
-| created_at, updated_at | timestamptz | |
-
-### Дополнительно
-- `CONTENT_PLAN_BUCKET_CONFIG` в `api/server.js` определяет, какие поля доступны для каждого bucket.
-- `CONTENT_PLAN_PERMISSIONS` описывает роли, которые могут управлять соответствующими таблицами.
+Эти таблицы создаются миграциями Supabase / SQL-скриптами из каталога `sql/`.
