@@ -1,4 +1,4 @@
-import { format, formatDistanceToNowStrict, isBefore, isValid, parseISO } from "date-fns";
+import { format, formatDistanceToNowStrict, isBefore, isSameDay, isValid, parseISO } from "date-fns";
 import { ru } from "date-fns/locale";
 
 export function parseDeadline(deadline) {
@@ -25,6 +25,12 @@ export function formatDeadline(deadline, now = new Date()) {
   const formattedDate = format(targetDate, "dd MMMM yyyy HH:mm", { locale: ru });
   const relative = formatDistanceToNowStrict(targetDate, { locale: ru, addSuffix: true });
   return `${formattedDate} (${relative})`;
+}
+
+export function isDeadlineOnDate(deadline, referenceDate = new Date()) {
+  const targetDate = parseDeadline(deadline);
+  if (!targetDate) return false;
+  return isSameDay(targetDate, referenceDate);
 }
 
 export function buildTaskSummary(task, now = new Date()) {

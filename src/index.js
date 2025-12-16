@@ -37,6 +37,8 @@ async function main() {
     pollIntervalMs: config.notifierPollIntervalMs,
     deadlineWindowHours: config.deadlineAlertWindowHours,
     taskUrlTemplate: config.taskUrlTemplate,
+    dailyReminderHour: config.dailyReminderHour,
+    dailyReminderMinute: config.dailyReminderMinute,
   });
 
   bot.catch((err) => {
