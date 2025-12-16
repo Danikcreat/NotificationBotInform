@@ -1,4 +1,4 @@
-import { formatDeadline, isDeadlineOnDate, isDeadlineWithinWindow, parseDeadline } from "./tasks.js";
+import { formatDeadline, getTaskLoginCandidates, isDeadlineOnDate, isDeadlineWithinWindow, parseDeadline } from "./tasks.js";
 
 export default class TaskNotifier {
   constructor({
@@ -76,29 +76,43 @@ export default class TaskNotifier {
     if (!isDeadlineWithinWindow(deadline, this.deadlineWindowHours, now)) {
       return;
     }
-    const responsibleLogin = task.responsible;
-    if (!responsibleLogin) return;
-    const user = this.userDirectory.getUserByLogin(responsibleLogin);
-    if (!user || !user.telegramOptIn || !user.telegramChatId) {
+    const loginCandidates = getTaskLoginCandidates(task);
+    if (!loginCandidates.length) {
       return;
     }
     const deadlineIso = deadline.toISOString();
     if (this.stateStore.wasDeadlineNotified(task.id, deadlineIso)) {
       return;
     }
+    const recipients = [];
+    for (const login of loginCandidates) {
+      const user = this.userDirectory.getUserByLogin(login);
+      if (user && user.telegramOptIn && user.telegramChatId) {
+        recipients.push(user);
+      }
+    }
+    if (!recipients.length) {
+      return;
+    }
     const message = this.composeDeadlineMessage(task, deadline);
-    try {
-      await this.bot.telegram.sendMessage(user.telegramChatId, message);
+    let deliveredCount = 0;
+    for (const user of recipients) {
+      try {
+        await this.bot.telegram.sendMessage(user.telegramChatId, message);
+        deliveredCount += 1;
+        this.logger?.info(
+          { taskId: task.id, login: user.login, deadline: deadlineIso },
+          "Deadline notification sent"
+        );
+      } catch (error) {
+        this.logger?.error(
+          { err: error, taskId: task.id, login: user.login },
+          "Failed to send Telegram notification"
+        );
+      }
+    }
+    if (deliveredCount > 0) {
       await this.stateStore.markDeadlineNotified(task.id, deadlineIso);
-      this.logger?.info(
-        { taskId: task.id, login: user.login, deadline: deadlineIso },
-        "Deadline notification sent"
-      );
-    } catch (error) {
-      this.logger?.error(
-        { err: error, taskId: task.id, login: user.login },
-        "Failed to send Telegram notification"
-      );
     }
   }
 
@@ -142,12 +156,13 @@ export default class TaskNotifier {
       if (!task?.deadline || !isDeadlineOnDate(task.deadline, now)) {
         continue;
       }
-      const loginKey = String(task.responsible || "").trim().toLowerCase();
-      if (!loginKey) continue;
-      if (!grouped.has(loginKey)) {
-        grouped.set(loginKey, []);
+      const loginKeys = getTaskLoginCandidates(task);
+      for (const loginKey of loginKeys) {
+        if (!grouped.has(loginKey)) {
+          grouped.set(loginKey, []);
+        }
+        grouped.get(loginKey).push(task);
       }
-      grouped.get(loginKey).push(task);
     }
     const recipients = [];
     for (const [loginKey, tasks] of grouped.entries()) {
