@@ -34,8 +34,8 @@ const config = Object.freeze({
   userRefreshIntervalMs: readNumberEnv("USER_REFRESH_INTERVAL_MS", 5 * 60 * 1000),
   notifierPollIntervalMs: readNumberEnv("TASK_NOTIFIER_POLL_INTERVAL_MS", 60 * 1000),
   deadlineAlertWindowHours: readNumberEnv("TASK_DEADLINE_ALERT_WINDOW_HOURS", 24),
-  dailyReminderHour: readNumberEnv("DAILY_REMINDER_HOUR", 17),
-  dailyReminderMinute: readNumberEnv("DAILY_REMINDER_MINUTE", 36),
+  dailyReminderHour: readNumberEnv("DAILY_REMINDER_HOUR", 22),
+  dailyReminderMinute: readNumberEnv("DAILY_REMINDER_MINUTE", 54),
   stateFilePath: path.resolve(
     readEnv("TASK_NOTIFIER_STATE_PATH", { defaultValue: path.join(process.cwd(), "bot-state.json") })
   ),
