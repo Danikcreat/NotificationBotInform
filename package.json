@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "node src/index.js",
     "start": "node src/index.js",
+    "notifier": "node src/notifierRunner.js",
     "notify": "node src/cli/notify.js",
     "notify-server": "node src/broadcastServer.js",
     "broadcast-credentials": "node src/cli/sendCredentials.js"
